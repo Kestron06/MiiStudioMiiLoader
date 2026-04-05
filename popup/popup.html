@@ -5,7 +5,7 @@
 			Loading...
 		</div>
 		<div id="not-valid-url" hidden>
-			<h2>Please visit <a href="https://my.nintendo.com/mii">the Mii Studio</a>, then edit a Mii to continue.</h2>
+			<h2>Please visit <a href="https://my.nintendo.com/mii" target="_blank">the Mii Studio</a>, then edit a Mii to continue.</h2>
 		</div>
 		<div id="mii-studio" hidden>
 			<div id="no-mii-id-or-client-id" hidden>
@@ -15,18 +15,50 @@
 				<h2>Could not find Mii data in local storage. Make and revert an edit to your Mii and try again.</h2>
 			</div>
 			<div class="content" hidden>
-				<h2>Current Mii Studio code</h2>
+				<h3>Current Mii:</h3>
+				<code id="mii-data"></code>
+				<button id="copyHex">Copy as Hex</button> <button id="copyB64">Copy as Base64</button>
+
+				<hr>
+
+				<h3>Import via Code:</h3>
 				<form>
-					<h2>
-						<code id="mii-data"></code>
-					</h2>
 					<input type="text" id="new-mii-studio-data" name="hex" placeholder="Hex or Base64 Code...">
 					<button id="update-mii-studio-data" type="submit">Import via Hex/Base64</button><br>
-
+					<br>
 					<hr>
 
-					<label for="fileUpload"><h2>Import via File</h2></label> <input type="file" name="fileUpload">
+					<label for="fileUpload"><h3>Import via File:</h3></label> <input type="file" name="fileUpload" id="fileInp">
+					<button id="impFile">Import</button>
 				</form>
+				<hr>
+				<h3>Export to File</h3>
+				<div class="searchable-select" id="export-format-dropdown">
+					<button type="button" id="export-format-button" class="searchable-select-trigger" aria-haspopup="listbox" aria-expanded="false">
+						.MNMS | Mii Studio
+					</button>
+					<div class="searchable-select-panel" id="export-format-panel" hidden>
+						<input type="search" id="export-format-search" placeholder="Search export formats..." autocomplete="off">
+						<div class="searchable-select-options" id="export-format-options" role="listbox"></div>
+					</div>
+					<select id="export-format-select" hidden>
+						<option>.MNMS | Mii Studio</option>
+						<option>.CHARINFO | Switch/2</option>
+						<option>.PNG | 3DS QR</option>
+						<option>.PNG | Wii U QR</option>
+						<option>.NFCD | Switch/2</option>
+						<option>.NFSD | Switch/2</option>
+						<option>.FFCD | Wii U</option>
+						<option>.FFSD | Wii U</option>
+						<option>.CFCD | 3DS</option>
+						<option>.CFSD | 3DS</option>
+						<option>.RCD | Wii</option>
+						<option>.RSD | Wii</option>
+						<option>.NCD | DS</option>
+						<option>.NSD | DS</option>
+					</select>
+				</div>
+				<button id="download">Download</button>
 			</div>
 		</div>
 		<script src="popup.js"></script>

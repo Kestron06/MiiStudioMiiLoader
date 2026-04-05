@@ -1,8 +1,9 @@
--[X] Made the hex code inputs more forgiving of common hex formatting
--[ ] Used MiiJS processing to make all Miis able to be uploaded in many more forms
--[X] Made the Mii Studio link clickable
--[ ] Restyled the popup to look a bit nicer
--[X] Made pressing Enter work as submitting the Mii
--[ ] Added file uploads and Base64 codes as upload types
--[ ] Added more export types
--[ ] Added a button to directly copy the Hex/Base64
+- [X] Made the hex code inputs more forgiving of common hex formatting
+- [X] Made the Mii Studio link clickable
+- [ ] Restyled the popup to look a bit nicer
+- [X] Made pressing Enter work as submitting the Mii
+- [X] Added file uploads as an upload type
+- [X] Added Base64 codes as an upload type
+- [ ] Added more export types
+- [X] Added a button to directly copy the Hex/Base64
+- [ ] Added the Github link to the popup
