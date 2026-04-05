@@ -4,24 +4,29 @@
 		<div id="loading">
 			Loading...
 		</div>
-		<div id="not-valid-url" class="hidden">
-			<h2>Please visit the Mii Studio, then edit a Mii to continue. https://my.nintendo.com/mii</h2>
+		<div id="not-valid-url" hidden>
+			<h2>Please visit <a href="https://my.nintendo.com/mii">the Mii Studio</a>, then edit a Mii to continue.</h2>
 		</div>
-		<div id="mii-studio" class="hidden">
-			<div id="no-mii-id-or-client-id" class="hidden">
+		<div id="mii-studio" hidden>
+			<div id="no-mii-id-or-client-id" hidden>
 				<h2>Could not find Mii ID and/or client ID in the URL. Close and revisit the page and try again.</h2>
 			</div>
-			<div id="no-mii-data-warning" class="hidden">
+			<div id="no-mii-data-warning" hidden>
 				<h2>Could not find Mii data in local storage. Make and revert an edit to your Mii and try again.</h2>
 			</div>
-			<div class="content hidden">
+			<div class="content" hidden>
 				<h2>Current Mii Studio code</h2>
-				<h2>
-					<code id="mii-data"></code>
-				</h2>
-				<input type="text" id="new-mii-studio-data">
-				<br>
-				<button id="update-mii-studio-data">Update Mii Studio Data</button>
+				<form>
+					<h2>
+						<code id="mii-data"></code>
+					</h2>
+					<input type="text" id="new-mii-studio-data" name="hex" placeholder="Hex or Base64 Code...">
+					<button id="update-mii-studio-data" type="submit">Import via Hex/Base64</button><br>
+
+					<hr>
+
+					<label for="fileUpload"><h2>Import via File</h2></label> <input type="file" name="fileUpload">
+				</form>
 			</div>
 		</div>
 		<script src="popup.js"></script>

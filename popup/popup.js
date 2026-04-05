@@ -15,7 +15,7 @@ let miiStudioClientID;
 let miiStudioStorageKey;
 
 const MII_STUDIO_URL_REGEX = /https:\/\/studio\.mii\.nintendo\.com\/miis\/([a-f0-9]{16})\/edit\?client_id=([a-f0-9]{16})/;
-const IS_HEX_REGEX = /^[A-Fa-f0-9]+$/;
+const IS_HEX_REGEX = /^[a-f\d\s]+$/i;
 
 async function getCurrentTab() {
 	const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -54,10 +54,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 	currentTab = await getCurrentTab();
 
-	loadingDiv.classList.add('hidden');
+	loadingDiv.hidden=true;
 
 	if (!MII_STUDIO_URL_REGEX.test(currentTab.url)) {
-		notValidURLDiv.classList.remove('hidden');
+		notValidURLDiv.hidden=false;
 		return;
 	}
 
@@ -73,12 +73,12 @@ async function initMiiStudio() {
 	newMiiStudioDataInput = miiStudioContentDiv.querySelector('#new-mii-studio-data');
 	updateMiiStudioDataButton = miiStudioContentDiv.querySelector('#update-mii-studio-data');
 
-	miiStudioDiv.classList.remove('hidden');
+	miiStudioDiv.hidden=false;
 
 	const regexResult = MII_STUDIO_URL_REGEX.exec(currentTab.url);
 
 	if (regexResult.length !== 3) {
-		miiStudioNoMiiIDOrClientIDWarningDiv.classList.remove('hidden');
+		miiStudioNoMiiIDOrClientIDWarningDiv.hidden=false;
 		return;
 	}
 
@@ -89,11 +89,11 @@ async function initMiiStudio() {
 	const miiData = await getPageLocalStorage(miiStudioStorageKey);
 
 	if (!miiData) {
-		miiStudioNoMiiDataWarningDiv.classList.remove('hidden');
+		miiStudioNoMiiDataWarningDiv.hidden=false;
 		return;
 	}
 
-	miiStudioContentDiv.classList.remove('hidden');
+	miiStudioContentDiv.hidden=false;
 
 	miiStudioMiiDataDiv.innerHTML = miiData;
 	updateMiiStudioDataButton.addEventListener('click', updateMiiStudioData);
@@ -102,7 +102,7 @@ async function initMiiStudio() {
 async function updateMiiStudioData() {
 	const newMiiData = newMiiStudioDataInput.value;
 
-	if (!newMiiData || newMiiData.length !== 92 || !IS_HEX_REGEX.test(newMiiData)) {
+	if (!newMiiData || !IS_HEX_REGEX.test(newMiiData)) {
 		alert('Invalid Mii Data');
 		return;
 	}

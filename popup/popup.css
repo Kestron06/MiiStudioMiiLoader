@@ -2,10 +2,6 @@ body {
 	min-width: 300px;
 }
 
-.hidden {
-	display: none;
-}
-
 input {
-	width: 100%;
+	width: 46rem;
 }
