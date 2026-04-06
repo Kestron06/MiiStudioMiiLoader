@@ -10,8 +10,6 @@ let updateMiiStudioDataButton;
 
 let currentTab;
 
-let miiStudioMiiID;
-let miiStudioClientID;
 let miiStudioStorageKey;
 let miijs;
 let exportFormatDropdown;
@@ -21,27 +19,10 @@ let exportFormatPanel;
 let exportFormatOptionsContainer;
 let exportFormatSelect;
 let exportFormatOptions = [];
-let popupWheelScrollingInitialised = false;
 
 const MII_STUDIO_URL_REGEX = /https:\/\/studio\.mii\.nintendo\.com\/miis\/([a-f0-9]{16})\/edit\?client_id=([a-f0-9]{16})/;
 const IS_HEX_REGEX = /^[a-f\d\s]+$/i;
 const IS_B64_REGEX = /^((([a-z\d+/]{4})*)([a-z\d+/]{4}|[a-z\d+/]{3}=|[a-z\d+/]{2}==))$/i;
-const EXPORT_FILE_CONFIGS = {
-	MNMS: { extension: 'mnms', mimeType: 'application/octet-stream' },
-	CHARINFO: { extension: 'charinfo', mimeType: 'application/octet-stream' },
-	PNG_3DS: { extension: 'png', mimeType: 'image/png' },
-	PNG_WIIU: { extension: 'png', mimeType: 'image/png' },
-	NFCD: { extension: 'nfcd', mimeType: 'application/octet-stream' },
-	NFSD: { extension: 'nfsd', mimeType: 'application/octet-stream' },
-	FFCD: { extension: 'ffcd', mimeType: 'application/octet-stream' },
-	FFSD: { extension: 'ffsd', mimeType: 'application/octet-stream' },
-	CFCD: { extension: 'cfcd', mimeType: 'application/octet-stream' },
-	CFSD: { extension: 'cfsd', mimeType: 'application/octet-stream' },
-	RCD: { extension: 'rcd', mimeType: 'application/octet-stream' },
-	RSD: { extension: 'rsd', mimeType: 'application/octet-stream' },
-	NCD: { extension: 'ncd', mimeType: 'application/octet-stream' },
-	NSD: { extension: 'nsd', mimeType: 'application/octet-stream' }
-};
 
 let miijsPromise;
 
@@ -59,34 +40,32 @@ async function getMiijs() {
 }
 
 async function getCurrentTab() {
-	const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-	return tabs[0];
+	const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+	return tab;
+}
+
+async function executeOnCurrentTab(func, args = []) {
+	const [{ result }] = await chrome.scripting.executeScript({
+		args,
+		target: {
+			tabId: currentTab.id
+		},
+		func
+	});
+
+	return result;
 }
 
 async function getPageLocalStorage(key) {
-	const response = await chrome.scripting.executeScript({
-		args: [key],
-		target: {
-			tabId: currentTab.id
-		},
-		func: function(key) {
-			return localStorage.getItem(key);
-		}
-	});
-
-	return response[0]?.result;
+	return executeOnCurrentTab(function(storageKey) {
+		return localStorage.getItem(storageKey);
+	}, [key]);
 }
 
 async function setPageLocalStorage(key, value) {
-	await chrome.scripting.executeScript({
-		args: [key, value],
-		target: {
-			tabId: currentTab.id
-		},
-		func: function(key, value) {
-			localStorage.setItem(key, value);
-		}
-	});
+	await executeOnCurrentTab(function(storageKey, storageValue) {
+		localStorage.setItem(storageKey, storageValue);
+	}, [key, value]);
 }
 
 function normaliseDropdownFilterText(text) {
@@ -98,15 +77,26 @@ function normaliseDropdownFilterText(text) {
 }
 
 function getCurrentStudioMiiData() {
-	return miiStudioMiiDataDiv?.innerText?.trim() ?? '';
+	return miiStudioMiiDataDiv?.textContent?.trim() ?? '';
 }
 
-function sanitiseMiiFilename(name) {
-	const sanitizedName = (name ?? 'mii')
-		.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
-		.trim();
+function normaliseStudioMiiData(value) {
+	let miiData = value?.trim() ?? '';
 
-	return sanitizedName || 'mii';
+	if (!miiData) {
+		return '';
+	}
+
+	if (!IS_HEX_REGEX.test(miiData)) {
+		const base64MiiData = miiData.replaceAll(" ","");
+		if (!IS_B64_REGEX.test(base64MiiData)) {
+			return '';
+		}
+		const decodedBytes = Uint8Array.from(atob(base64MiiData), character => character.charCodeAt(0));
+		miiData = Array.from(decodedBytes, byte => byte.toString(16).padStart(2, '0')).join('');
+	}
+
+	return miiData.replaceAll(" ","");
 }
 
 function toUint8Array(data) {
@@ -137,10 +127,10 @@ function triggerFileDownload(fileName, data, mimeType) {
 
 async function buildExportPayload(decodedMii, exportFormat) {
 	if (exportFormat === 'PNG_3DS') {
-		const qrFormat = decodedMii?.hasOwnProperty('tl')
-			? miijs.MiiFormats.TLE
-			: miijs.MiiFormats.CFED;
-		const qrData = miijs.encodeMii(decodedMii, qrFormat);
+		const qrData = miijs.encodeMii(
+			decodedMii,
+			decodedMii?.hasOwnProperty('tl') ? miijs.MiiFormats.TLE : miijs.MiiFormats.CFED
+		);
 		return await miijs.makeQR(qrData);
 	}
 
@@ -303,8 +293,7 @@ function initExportFormatSearch() {
 	clearExportFormatOptions();
 
 	exportFormatButton.addEventListener('click', () => {
-		const isOpening = exportFormatPanel.hidden;
-		if (!isOpening) {
+		if (!exportFormatPanel.hidden) {
 			closeExportFormatDropdown();
 			return;
 		}
@@ -352,12 +341,6 @@ function initExportFormatSearch() {
 }
 
 function initPopupWheelScrolling() {
-	if (popupWheelScrollingInitialised) {
-		return;
-	}
-
-	popupWheelScrollingInitialised = true;
-
 	document.addEventListener('wheel', event => {
 		if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
 			return;
@@ -389,14 +372,7 @@ function initPopupWheelScrolling() {
 	}, { passive: false });
 }
 
-let popupInitialised = false;
-
 async function initPopup() {
-	if (popupInitialised) {
-		return;
-	}
-
-	popupInitialised = true;
 	loadingDiv = document.querySelector('#loading');
 	notValidURLDiv = document.querySelector('#not-valid-url');
 	initExportFormatSearch();
@@ -458,8 +434,7 @@ async function initMiiStudio() {
 		return;
 	}
 
-	miiStudioMiiID = regexResult[1];
-	miiStudioClientID = regexResult[2];
+	const [, miiStudioMiiID, miiStudioClientID] = regexResult;
 	miiStudioStorageKey = `https%3A%2F%2Fstudio.mii.nintendo.com%2Fmiis%2F${miiStudioMiiID}%2Fedit%3Fclient_id%3D${miiStudioClientID}`;
 
 	const miiData = await getPageLocalStorage(miiStudioStorageKey);
@@ -469,21 +444,24 @@ async function initMiiStudio() {
 		return;
 	}
 
+	miiStudioContentDiv.querySelector('form')?.addEventListener('submit', event => {
+		event.preventDefault();
+	});
+
 	miiStudioContentDiv.hidden=false;
 
-	miiStudioMiiDataDiv.innerHTML = miiData;
+	miiStudioMiiDataDiv.textContent = miiData;
 	updateMiiStudioDataButton.addEventListener('click', updateMiiStudioData);
 }
 
 async function updateMiiStudioData() {
-	let newMiiData = newMiiStudioDataInput.value;
+	const newMiiData = normaliseStudioMiiData(newMiiStudioDataInput.value);
 
-	if(newMiiData && !IS_HEX_REGEX.test(newMiiData) && IS_B64_REGEX.test(newMiiData)){
-		newMiiData=Uint8Array.from(atob(newMiiData), c => c.charCodeAt(0));
-  		newMiiData=Array.from(newMiiData, b => b.toString(16).padStart(2, "0")).join("");
-	}
-
-	if (!newMiiData || !IS_HEX_REGEX.test(newMiiData)) {
+	if (
+		!newMiiData
+		|| newMiiData.length % 2 !== 0
+		|| !IS_HEX_REGEX.test(newMiiData)
+	) {
 		alert('Invalid Mii Data');
 		return;
 	}
@@ -496,11 +474,12 @@ async function updateMiiStudioData() {
 }
 
 document.getElementById("copyHex").addEventListener('click',()=>{
-	navigator.clipboard.writeText(miiStudioMiiDataDiv.innerText);
+	navigator.clipboard.writeText(getCurrentStudioMiiData());
 });
 document.getElementById("copyB64").addEventListener('click',()=>{
+	const currentStudioMiiData = getCurrentStudioMiiData().replaceAll(" ","");
 	let copied=new Uint8Array(
-		miiStudioMiiDataDiv.innerText.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
+		currentStudioMiiData.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
 	);
 	copied=btoa(String.fromCharCode(...copied));
 	navigator.clipboard.writeText(copied);
@@ -547,15 +526,21 @@ document.getElementById("download").addEventListener('click',async ()=>{
 		}
 
 		const exportFormat = exportFormatSelect?.value ?? 'MNMS';
-		const exportConfig = EXPORT_FILE_CONFIGS[exportFormat];
+		const exportConfig ={
+			extension: exportFormat.includes("_")?exportFormat.toLowerCase().split("_")[0]:exportFormat.toLowerCase(),
+			mimeType: exportFormat.includes("PNG")?`image/png`:`application/octet-stream`
+		};
 		if (!exportConfig) {
 			throw new Error(`Unsupported export format: ${exportFormat}`);
 		}
 
 		const decodedMii = miijs.decodeMii(currentMiiData);
 		const exportedData = await buildExportPayload(decodedMii, exportFormat);
-		const fileName = `${sanitiseMiiFilename(decodedMii?.meta?.name)}.${exportConfig.extension}`;
-		triggerFileDownload(fileName, exportedData, exportConfig.mimeType);
+		triggerFileDownload(
+			`mii.${exportConfig.extension}`,
+			exportedData,
+			exportConfig.mimeType
+		);
 	}
 	catch (error) {
 		console.error('Failed to export Mii file', error);

@@ -1,9 +1,0 @@
-- [X] Made the hex code inputs more forgiving of common hex formatting
-- [X] Made the Mii Studio link clickable
-- [X] Restyled the popup to look a bit nicer
-- [X] Made pressing Enter work as submitting the Mii
-- [X] Added file uploads as an upload type
-- [X] Added Base64 codes as an upload type
-- [X] Added more export types
-- [X] Added a button to directly copy the Hex/Base64
-- [X] Added the Github link to the popup
