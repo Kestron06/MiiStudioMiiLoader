@@ -21,10 +21,27 @@ let exportFormatPanel;
 let exportFormatOptionsContainer;
 let exportFormatSelect;
 let exportFormatOptions = [];
+let popupWheelScrollingInitialised = false;
 
 const MII_STUDIO_URL_REGEX = /https:\/\/studio\.mii\.nintendo\.com\/miis\/([a-f0-9]{16})\/edit\?client_id=([a-f0-9]{16})/;
 const IS_HEX_REGEX = /^[a-f\d\s]+$/i;
 const IS_B64_REGEX = /^((([a-z\d+/]{4})*)([a-z\d+/]{4}|[a-z\d+/]{3}=|[a-z\d+/]{2}==))$/i;
+const EXPORT_FILE_CONFIGS = {
+	MNMS: { extension: 'mnms', mimeType: 'application/octet-stream' },
+	CHARINFO: { extension: 'charinfo', mimeType: 'application/octet-stream' },
+	PNG_3DS: { extension: 'png', mimeType: 'image/png' },
+	PNG_WIIU: { extension: 'png', mimeType: 'image/png' },
+	NFCD: { extension: 'nfcd', mimeType: 'application/octet-stream' },
+	NFSD: { extension: 'nfsd', mimeType: 'application/octet-stream' },
+	FFCD: { extension: 'ffcd', mimeType: 'application/octet-stream' },
+	FFSD: { extension: 'ffsd', mimeType: 'application/octet-stream' },
+	CFCD: { extension: 'cfcd', mimeType: 'application/octet-stream' },
+	CFSD: { extension: 'cfsd', mimeType: 'application/octet-stream' },
+	RCD: { extension: 'rcd', mimeType: 'application/octet-stream' },
+	RSD: { extension: 'rsd', mimeType: 'application/octet-stream' },
+	NCD: { extension: 'ncd', mimeType: 'application/octet-stream' },
+	NSD: { extension: 'nsd', mimeType: 'application/octet-stream' }
+};
 
 let miijsPromise;
 
@@ -80,6 +97,87 @@ function normaliseDropdownFilterText(text) {
 		.trim();
 }
 
+function getCurrentStudioMiiData() {
+	return miiStudioMiiDataDiv?.innerText?.trim() ?? '';
+}
+
+function sanitiseMiiFilename(name) {
+	const sanitizedName = (name ?? 'mii')
+		.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+		.trim();
+
+	return sanitizedName || 'mii';
+}
+
+function toUint8Array(data) {
+	if (data instanceof Uint8Array) {
+		return data;
+	}
+	if (data instanceof ArrayBuffer) {
+		return new Uint8Array(data);
+	}
+	if (ArrayBuffer.isView(data)) {
+		return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+	}
+	return new Uint8Array(data);
+}
+
+function triggerFileDownload(fileName, data, mimeType) {
+	const fileBytes = toUint8Array(data);
+	const blob = new Blob([fileBytes], { type: mimeType });
+	const downloadUrl = URL.createObjectURL(blob);
+	const anchor = document.createElement('a');
+	anchor.href = downloadUrl;
+	anchor.download = fileName;
+	document.body.appendChild(anchor);
+	anchor.click();
+	anchor.remove();
+	setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+}
+
+async function buildExportPayload(decodedMii, exportFormat) {
+	if (exportFormat === 'PNG_3DS') {
+		const qrFormat = decodedMii?.hasOwnProperty('tl')
+			? miijs.MiiFormats.TLE
+			: miijs.MiiFormats.CFED;
+		const qrData = miijs.encodeMii(decodedMii, qrFormat);
+		return await miijs.makeQR(qrData);
+	}
+
+	if (exportFormat === 'PNG_WIIU') {
+		const qrData = miijs.encodeMii(decodedMii, miijs.MiiFormats.FFED);
+		return await miijs.makeQR(qrData);
+	}
+
+	return miijs.encodeMii(decodedMii, miijs.MiiFormats[exportFormat]);
+}
+
+function getVisibleExportFormatOptionButtons() {
+	if (!exportFormatOptionsContainer) {
+		return [];
+	}
+
+	return Array.from(exportFormatOptionsContainer.querySelectorAll('.searchable-select-option'));
+}
+
+function focusExportFormatOption(index) {
+	const optionButtons = getVisibleExportFormatOptionButtons();
+	if (optionButtons.length === 0) {
+		return;
+	}
+
+	const boundedIndex = Math.max(0, Math.min(index, optionButtons.length - 1));
+	optionButtons[boundedIndex].focus();
+}
+
+function clearExportFormatOptions() {
+	if (!exportFormatOptionsContainer) {
+		return;
+	}
+
+	exportFormatOptionsContainer.replaceChildren();
+}
+
 function closeExportFormatDropdown({ resetFilter = true } = {}) {
 	if (!exportFormatPanel || !exportFormatButton) {
 		return;
@@ -87,6 +185,7 @@ function closeExportFormatDropdown({ resetFilter = true } = {}) {
 
 	exportFormatPanel.hidden = true;
 	exportFormatButton.setAttribute('aria-expanded', 'false');
+	clearExportFormatOptions();
 
 	if (resetFilter && exportFormatSearchInput) {
 		exportFormatSearchInput.value = '';
@@ -147,6 +246,38 @@ function renderExportFormatOptions(filterText = '') {
 			setSelectedExportFormat(option.value);
 			closeExportFormatDropdown();
 		});
+		optionElement.addEventListener('keydown', event => {
+			const optionButtons = getVisibleExportFormatOptionButtons();
+			const currentIndex = optionButtons.indexOf(optionElement);
+
+			if (event.key === 'ArrowDown') {
+				event.preventDefault();
+				focusExportFormatOption(currentIndex + 1);
+				return;
+			}
+
+			if (event.key === 'ArrowUp') {
+				event.preventDefault();
+				if (currentIndex <= 0) {
+					exportFormatSearchInput.focus();
+					return;
+				}
+				focusExportFormatOption(currentIndex - 1);
+				return;
+			}
+
+			if (event.key === 'Enter' || event.key === ' ') {
+				event.preventDefault();
+				optionElement.click();
+				return;
+			}
+
+			if (event.key === 'Escape') {
+				event.preventDefault();
+				closeExportFormatDropdown();
+				exportFormatButton.focus();
+			}
+		});
 		exportFormatOptionsContainer.appendChild(optionElement);
 	}
 }
@@ -169,7 +300,7 @@ function initExportFormatSearch() {
 	}));
 
 	setSelectedExportFormat(exportFormatSelect.value);
-	renderExportFormatOptions();
+	clearExportFormatOptions();
 
 	exportFormatButton.addEventListener('click', () => {
 		const isOpening = exportFormatPanel.hidden;
@@ -187,6 +318,15 @@ function initExportFormatSearch() {
 		}, 0);
 	});
 
+	exportFormatButton.addEventListener('keydown', event => {
+		if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			if (exportFormatPanel.hidden) {
+				exportFormatButton.click();
+			}
+		}
+	});
+
 	exportFormatSearchInput.addEventListener('input', event => {
 		renderExportFormatOptions(event.target.value);
 	});
@@ -195,6 +335,12 @@ function initExportFormatSearch() {
 		if (event.key === 'Escape') {
 			closeExportFormatDropdown();
 			exportFormatButton.focus();
+			return;
+		}
+
+		if (event.key === 'ArrowDown') {
+			event.preventDefault();
+			focusExportFormatOption(0);
 		}
 	});
 
@@ -205,29 +351,94 @@ function initExportFormatSearch() {
 	});
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-	loadingDiv = document.querySelector('#loading');
-	notValidURLDiv = document.querySelector('#not-valid-url');
-	initExportFormatSearch();
-
-	try {
-		miijs = await getMiijs();
-	}
-	catch (error) {
-		console.error('miijs is unavailable in popup.js', error);
-	}
-
-	currentTab = await getCurrentTab();
-
-	loadingDiv.hidden=true;
-
-	if (!MII_STUDIO_URL_REGEX.test(currentTab.url)) {
-		notValidURLDiv.hidden=false;
+function initPopupWheelScrolling() {
+	if (popupWheelScrollingInitialised) {
 		return;
 	}
 
-	initMiiStudio();
-});
+	popupWheelScrollingInitialised = true;
+
+	document.addEventListener('wheel', event => {
+		if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+			return;
+		}
+
+		const target = event.target instanceof Element
+			? event.target
+			: null;
+		if (!target) {
+			return;
+		}
+
+		const isExportDropdownOpen = exportFormatPanel && !exportFormatPanel.hidden;
+		if (isExportDropdownOpen && exportFormatOptionsContainer?.contains(target)) {
+			return;
+		}
+
+		const scrollElement = document.scrollingElement || document.documentElement;
+		if (!scrollElement || scrollElement.scrollHeight <= scrollElement.clientHeight) {
+			return;
+		}
+
+		const previousScrollTop = scrollElement.scrollTop;
+		scrollElement.scrollTop += event.deltaY;
+
+		if (scrollElement.scrollTop !== previousScrollTop) {
+			event.preventDefault();
+		}
+	}, { passive: false });
+}
+
+let popupInitialised = false;
+
+async function initPopup() {
+	if (popupInitialised) {
+		return;
+	}
+
+	popupInitialised = true;
+	loadingDiv = document.querySelector('#loading');
+	notValidURLDiv = document.querySelector('#not-valid-url');
+	initExportFormatSearch();
+	initPopupWheelScrolling();
+
+	try {
+		currentTab = await getCurrentTab();
+
+		if (!MII_STUDIO_URL_REGEX.test(currentTab?.url ?? '')) {
+			notValidURLDiv.hidden = false;
+			return;
+		}
+
+		await initMiiStudio();
+	}
+	catch (error) {
+		console.error('Failed to initialize popup', error);
+		notValidURLDiv.hidden = false;
+		const errorHeading = notValidURLDiv.querySelector('h2');
+		if (errorHeading) {
+			errorHeading.textContent = 'The popup failed to initialize. Check the popup console for details and try again.';
+		}
+	}
+	finally {
+		loadingDiv.hidden = true;
+	}
+
+	getMiijs()
+		.then(loadedMiijs => {
+			miijs = loadedMiijs;
+		})
+		.catch(error => {
+			console.error('miijs is unavailable in popup.js', error);
+		});
+}
+
+if (document.readyState === 'loading') {
+	document.addEventListener('DOMContentLoaded', initPopup, { once: true });
+}
+else {
+	initPopup();
+}
 
 async function initMiiStudio() {
 	miiStudioDiv = document.querySelector('#mii-studio');
@@ -297,11 +508,13 @@ document.getElementById("copyB64").addEventListener('click',()=>{
 
 document.getElementById("impFile").addEventListener('click',async ()=>{
 	const inputFile = document.getElementById("fileInp").files?.[0];
-	if (!inputFile || !miijs) {
+	if (!inputFile) {
 		return;
 	}
 
 	try {
+		miijs ??= await getMiijs();
+
 		let decodedInput = new Uint8Array(await inputFile.arrayBuffer());
 		const isImageFile = inputFile.type.startsWith('image/')
 			|| /\.(png|jpe?g)$/i.test(inputFile.name);
@@ -321,5 +534,31 @@ document.getElementById("impFile").addEventListener('click',async ()=>{
 	}
 	catch (error) {
 		console.error('Failed to decode uploaded Mii file', error);
+	}
+});
+
+document.getElementById("download").addEventListener('click',async ()=>{
+	try {
+		miijs ??= await getMiijs();
+
+		const currentMiiData = getCurrentStudioMiiData();
+		if (!currentMiiData) {
+			throw new Error('No Mii Studio data is loaded to export.');
+		}
+
+		const exportFormat = exportFormatSelect?.value ?? 'MNMS';
+		const exportConfig = EXPORT_FILE_CONFIGS[exportFormat];
+		if (!exportConfig) {
+			throw new Error(`Unsupported export format: ${exportFormat}`);
+		}
+
+		const decodedMii = miijs.decodeMii(currentMiiData);
+		const exportedData = await buildExportPayload(decodedMii, exportFormat);
+		const fileName = `${sanitiseMiiFilename(decodedMii?.meta?.name)}.${exportConfig.extension}`;
+		triggerFileDownload(fileName, exportedData, exportConfig.mimeType);
+	}
+	catch (error) {
+		console.error('Failed to export Mii file', error);
+		alert('Failed to export the current Mii. Check the popup console for details.');
 	}
 });

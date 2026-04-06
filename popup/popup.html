@@ -1,6 +1,12 @@
-<html>
-	<link rel="stylesheet" href="popup.css">
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>Mii Studio Mii Loader</title>
+		<link rel="stylesheet" href="popup.css">
+	</head>
 	<body>
+		<a href="https://github.com/HEYimHeroic/MiiStudioMiiLoader" id="gitLink" target="_blank"><img src="https://github.com/favicon.ico" alt="Github"></a>
 		<div id="loading">
 			Loading...
 		</div>
@@ -33,6 +39,7 @@
 				</form>
 				<hr>
 				<h3>Export to File</h3>
+				<button id="download">Download</button>
 				<div class="searchable-select" id="export-format-dropdown">
 					<button type="button" id="export-format-button" class="searchable-select-trigger" aria-haspopup="listbox" aria-expanded="false">
 						.MNMS | Mii Studio
@@ -42,23 +49,22 @@
 						<div class="searchable-select-options" id="export-format-options" role="listbox"></div>
 					</div>
 					<select id="export-format-select" hidden>
-						<option>.MNMS | Mii Studio</option>
-						<option>.CHARINFO | Switch/2</option>
-						<option>.PNG | 3DS QR</option>
-						<option>.PNG | Wii U QR</option>
-						<option>.NFCD | Switch/2</option>
-						<option>.NFSD | Switch/2</option>
-						<option>.FFCD | Wii U</option>
-						<option>.FFSD | Wii U</option>
-						<option>.CFCD | 3DS</option>
-						<option>.CFSD | 3DS</option>
-						<option>.RCD | Wii</option>
-						<option>.RSD | Wii</option>
-						<option>.NCD | DS</option>
-						<option>.NSD | DS</option>
+						<option value="MNMS">.MNMS | Mii Studio</option>
+						<option value="CHARINFO">.CHARINFO | Switch/2</option>
+						<option value="PNG_3DS">.PNG | 3DS QR</option>
+						<option value="PNG_WIIU">.PNG | Wii U QR</option>
+						<option value="NFCD">.NFCD | Switch/2</option>
+						<option value="NFSD">.NFSD | Switch/2</option>
+						<option value="FFCD">.FFCD | Wii U</option>
+						<option value="FFSD">.FFSD | Wii U</option>
+						<option value="CFCD">.CFCD | 3DS</option>
+						<option value="CFSD">.CFSD | 3DS</option>
+						<option value="RCD">.RCD | Wii</option>
+						<option value="RSD">.RSD | Wii</option>
+						<option value="NCD">.NCD | DS</option>
+						<option value="NSD">.NSD | DS</option>
 					</select>
 				</div>
-				<button id="download">Download</button>
 			</div>
 		</div>
 		<script src="popup.js"></script>
