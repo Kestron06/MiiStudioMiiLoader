@@ -26,6 +26,7 @@ const IS_HEX_REGEX = /^[a-f\d\s]+$/i;
 const IS_B64_REGEX = /^((([a-z\d+/]{4})*)([a-z\d+/]{4}|[a-z\d+/]{3}=|[a-z\d+/]{2}==))$/i;
 const QR_EXPORT_OVERLAY_FRACTION = 0.3;
 const QR_EXPORT_OUTLINE_WIDTH = 4;
+const QR_EXPORT_MARGIN = 48;
 const MII_EXPORT_DEFAULTS = {
 	creatorMac: '732F6D6E6D73',
 	creatorName: 'Mii Loader',
@@ -253,7 +254,8 @@ async function getQrExportOptions() {
 	return {
 		image: await getQrIconData(),
 		noRenderMii: true,
-		overlayFrac: QR_EXPORT_OVERLAY_FRACTION
+		overlayFrac: QR_EXPORT_OVERLAY_FRACTION,
+		margin: QR_EXPORT_MARGIN
 	};
 }
 
@@ -351,7 +353,7 @@ async function buildExportPayload(decodedMii, exportFormat) {
 	const exportMii = withMiiExportDefaults(decodedMii);
 
 	if (exportFormat === 'PNG_ALL') {
-		const qrData = await miijs.encodeMii(exportMii, miijs.MiiFormats.FSDEX);
+		const qrData = await miijs.encodeMii(exportMii, miijs.MiiFormats.FEDEX);
 		return await makeQrExport(qrData);
 	}
 
