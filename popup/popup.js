@@ -21,7 +21,7 @@ let exportFormatOptions = [];
 let themeToggleButton;
 
 const THEME_STORAGE_KEY = 'mii-studio-mii-loader-theme';
-const MII_STUDIO_URL_REGEX = /https:\/\/studio\.mii\.nintendo\.com\/miis\/([a-f0-9]{16})\/edit\?client_id=([a-f0-9]{16})/;
+const PAGE_REQUEST = 'mii-studio-mii-loader:page';
 const IS_HEX_REGEX = /^[a-f\d\s]+$/i;
 const IS_B64_REGEX = /^((([a-z\d+/]{4})*)([a-z\d+/]{4}|[a-z\d+/]{3}=|[a-z\d+/]{2}==))$/i;
 const QR_EXPORT_OVERLAY_FRACTION = 0.3;
@@ -103,77 +103,12 @@ async function getCurrentTab() {
 	return tab;
 }
 
-async function executeOnCurrentTab(func, args = []) {
-	const [{ result }] = await chrome.scripting.executeScript({
-		args,
-		target: {
-			tabId: currentTab.id
-		},
-		func
-	});
-
-	return result;
-}
-
-async function getPageLocalStorage(key) {
-	return executeOnCurrentTab(function(storageKey) {
-		const exactKey = encodeURIComponent(location.href);
-		const exactData = localStorage.getItem(exactKey);
-		if (exactData) {
-			return { key: exactKey, data: exactData };
-		}
-		const fallbackData = localStorage.getItem(storageKey);
-		return fallbackData ? { key: storageKey, data: fallbackData } : null;
-	}, [key]);
-}
-
-async function recoverPageMiiData(storageKey) {
-	const [{ result }] = await chrome.scripting.executeScript({
-		target: { tabId: currentTab.id },
-		world: 'MAIN',
-		args: [storageKey],
-		func: async function(fallbackKey) {
-			const currentUrl = new URL(location.href);
-			const expectedUrl = new URL(decodeURIComponent(fallbackKey));
-			if (currentUrl.origin !== expectedUrl.origin
-				|| currentUrl.pathname.replace(/\/$/, '') !== expectedUrl.pathname
-				|| currentUrl.searchParams.get('client_id') !== expectedUrl.searchParams.get('client_id')) {
-				return null;
-			}
-
-			const exactKey = encodeURIComponent(location.href);
-			const existing = localStorage.getItem(exactKey) || localStorage.getItem(fallbackKey);
-			if (existing) {
-				return { key: localStorage.getItem(exactKey) ? exactKey : fallbackKey, data: existing };
-			}
-
-			for (let attempt = 0; attempt < 20; attempt++) {
-				const canvas = document.querySelector('canvas#canvas');
-				for (let element = canvas; element; element = element.parentElement) {
-					for (let editor = element.__vue__; editor; editor = editor.$parent) {
-						if (editor.isPartsPage !== true || !editor.history?.current
-							|| typeof editor.onPartsUpdated !== 'function') {
-							continue;
-						}
-
-						editor.onPartsUpdated(editor.history.current);
-						const data = localStorage.getItem(exactKey) || localStorage.getItem(fallbackKey);
-						return data ? { key: localStorage.getItem(exactKey) ? exactKey : fallbackKey, data } : null;
-					}
-				}
-				await new Promise(resolve => setTimeout(resolve, 100));
-			}
-
-			return null;
-		}
-	});
-	return result ?? null;
-}
-
 async function setPageLocalStorage(key, value) {
-	await executeOnCurrentTab(function(storageKey, storageValue) {
-		localStorage.setItem(storageKey, storageValue);
-	}, [key, value]);
+	const response = await chrome.tabs.sendMessage(currentTab.id,
+		{ type: PAGE_REQUEST, action: 'write', key, value });
+	if (response?.status !== 'written') {
+		throw new Error(`Could not update this Mii: ${response?.status ?? 'no response'}`);
+	}
 }
 
 function getCurrentStudioMiiData() {
@@ -577,19 +512,30 @@ async function initPopup() {
 
 	try {
 		currentTab = await getCurrentTab();
+		if (!Number.isInteger(currentTab?.id)) {
+			notValidURLDiv.hidden = false;
+			return;
+		}
+		let page;
+		try {
+			page = await chrome.tabs.sendMessage(currentTab.id, { type: PAGE_REQUEST, action: 'read' });
+		} catch {
+			notValidURLDiv.hidden = false;
+			return;
+		}
 
-		if (/^https:\/\/studio\.mii\.nintendo\.com\/miis\/new\/?(?:[?#]|$)/.test(currentTab?.url ?? '')) {
+		if (page?.status === 'new') {
 			notValidURLDiv.querySelector('h2').textContent = 'The Mii must be saved once before we can process it.';
 			notValidURLDiv.hidden = false;
 			return;
 		}
 
-		if (!MII_STUDIO_URL_REGEX.test(currentTab?.url ?? '')) {
+		if (page?.status === 'wrong-page') {
 			notValidURLDiv.hidden = false;
 			return;
 		}
 
-		await initMiiStudio();
+		await initMiiStudio(page);
 	}
 	catch (error) {
 		console.error('Failed to initialize popup', error);
@@ -619,7 +565,7 @@ else {
 	initPopup();
 }
 
-async function initMiiStudio() {
+async function initMiiStudio(page) {
 	miiStudioDiv = document.querySelector('#mii-studio');
 	miiStudioNoMiiIDOrClientIDWarningDiv = miiStudioDiv.querySelector('#no-mii-id-or-client-id');
 	miiStudioNoMiiDataWarningDiv = miiStudioDiv.querySelector('#no-mii-data-warning');
@@ -630,38 +576,18 @@ async function initMiiStudio() {
 
 	miiStudioDiv.hidden=false;
 
-	const regexResult = MII_STUDIO_URL_REGEX.exec(currentTab.url);
-
-	if (regexResult.length !== 3) {
+	if (page?.status === 'missing-id') {
 		miiStudioNoMiiIDOrClientIDWarningDiv.hidden=false;
 		return;
 	}
-
-	const [, miiStudioMiiID, miiStudioClientID] = regexResult;
-	miiStudioStorageKey = `https%3A%2F%2Fstudio.mii.nintendo.com%2Fmiis%2F${miiStudioMiiID}%2Fedit%3Fclient_id%3D${miiStudioClientID}`;
-
-	const storedMii = await getPageLocalStorage(miiStudioStorageKey);
-	let miiData = storedMii?.data;
-	if (storedMii?.key) {
-		miiStudioStorageKey = storedMii.key;
-	}
-	if (!miiData) {
-		try {
-			const recovered = await recoverPageMiiData(miiStudioStorageKey);
-			if (recovered?.data) {
-				miiStudioStorageKey = recovered.key;
-				miiData = recovered.data;
-			}
-		}
-		catch (error) {
-			console.warn('Could not load the current Mii from the editor.', error);
-		}
-	}
-
-	if (!miiData) {
+	if (page?.status === 'missing-data') {
 		miiStudioNoMiiDataWarningDiv.hidden=false;
 		return;
 	}
+	if (page?.status !== 'ready' || typeof page.key !== 'string' || typeof page.data !== 'string') {
+		throw new Error(`Unexpected page response: ${page?.status ?? 'no response'}`);
+	}
+	miiStudioStorageKey = page.key;
 
 	miiStudioContentDiv.querySelector('form')?.addEventListener('submit', event => {
 		event.preventDefault();
@@ -669,7 +595,7 @@ async function initMiiStudio() {
 
 	miiStudioContentDiv.hidden=false;
 
-	miiStudioMiiDataDiv.textContent = miiData;
+	miiStudioMiiDataDiv.textContent = page.data;
 	updateMiiStudioDataButton.addEventListener('click', updateMiiStudioData);
 }
 
