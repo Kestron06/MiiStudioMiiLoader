@@ -578,6 +578,12 @@ async function initPopup() {
 	try {
 		currentTab = await getCurrentTab();
 
+		if (/^https:\/\/studio\.mii\.nintendo\.com\/miis\/new\/?(?:[?#]|$)/.test(currentTab?.url ?? '')) {
+			notValidURLDiv.querySelector('h2').textContent = 'The Mii must be saved once before we can process it.';
+			notValidURLDiv.hidden = false;
+			return;
+		}
+
 		if (!MII_STUDIO_URL_REGEX.test(currentTab?.url ?? '')) {
 			notValidURLDiv.hidden = false;
 			return;
