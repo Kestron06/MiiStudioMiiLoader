@@ -116,8 +116,57 @@ async function executeOnCurrentTab(func, args = []) {
 
 async function getPageLocalStorage(key) {
 	return executeOnCurrentTab(function(storageKey) {
-		return localStorage.getItem(storageKey);
+		const exactKey = encodeURIComponent(location.href);
+		const exactData = localStorage.getItem(exactKey);
+		if (exactData) {
+			return { key: exactKey, data: exactData };
+		}
+		const fallbackData = localStorage.getItem(storageKey);
+		return fallbackData ? { key: storageKey, data: fallbackData } : null;
 	}, [key]);
+}
+
+async function recoverPageMiiData(storageKey) {
+	const [{ result }] = await chrome.scripting.executeScript({
+		target: { tabId: currentTab.id },
+		world: 'MAIN',
+		args: [storageKey],
+		func: async function(fallbackKey) {
+			const currentUrl = new URL(location.href);
+			const expectedUrl = new URL(decodeURIComponent(fallbackKey));
+			if (currentUrl.origin !== expectedUrl.origin
+				|| currentUrl.pathname.replace(/\/$/, '') !== expectedUrl.pathname
+				|| currentUrl.searchParams.get('client_id') !== expectedUrl.searchParams.get('client_id')) {
+				return null;
+			}
+
+			const exactKey = encodeURIComponent(location.href);
+			const existing = localStorage.getItem(exactKey) || localStorage.getItem(fallbackKey);
+			if (existing) {
+				return { key: localStorage.getItem(exactKey) ? exactKey : fallbackKey, data: existing };
+			}
+
+			for (let attempt = 0; attempt < 20; attempt++) {
+				const canvas = document.querySelector('canvas#canvas');
+				for (let element = canvas; element; element = element.parentElement) {
+					for (let editor = element.__vue__; editor; editor = editor.$parent) {
+						if (editor.isPartsPage !== true || !editor.history?.current
+							|| typeof editor.onPartsUpdated !== 'function') {
+							continue;
+						}
+
+						editor.onPartsUpdated(editor.history.current);
+						const data = localStorage.getItem(exactKey) || localStorage.getItem(fallbackKey);
+						return data ? { key: localStorage.getItem(exactKey) ? exactKey : fallbackKey, data } : null;
+					}
+				}
+				await new Promise(resolve => setTimeout(resolve, 100));
+			}
+
+			return null;
+		}
+	});
+	return result ?? null;
 }
 
 async function setPageLocalStorage(key, value) {
@@ -293,37 +342,6 @@ async function drawQrOutline(qrPngData) {
 	return new Uint8Array(await outlinedBlob.arrayBuffer());
 }
 
-async function convertPngToJpeg(pngData) {
-	const pngBytes = toUint8Array(pngData);
-	const imageBitmap = await createImageBitmap(new Blob([pngBytes], { type: 'image/png' }));
-	const canvas = document.createElement('canvas');
-	canvas.width = imageBitmap.width;
-	canvas.height = imageBitmap.height;
-
-	const context = canvas.getContext('2d');
-	if (!context) {
-		throw new Error('Could not create a canvas context for JPG export.');
-	}
-
-	context.fillStyle = '#ffffff';
-	context.fillRect(0, 0, canvas.width, canvas.height);
-	context.drawImage(imageBitmap, 0, 0);
-	imageBitmap.close?.();
-
-	const jpegBlob = await new Promise((resolve, reject) => {
-		canvas.toBlob(blob => {
-			if (blob) {
-				resolve(blob);
-				return;
-			}
-
-			reject(new Error('Could not convert the QR PNG to JPG.'));
-		}, 'image/jpeg', 0.95);
-	});
-
-	return new Uint8Array(await jpegBlob.arrayBuffer());
-}
-
 async function makeQrExport(qrData) {
 	const qrPng = await miijs.makeQR(qrData, await getQrExportOptions());
 	return await drawQrOutline(qrPng);
@@ -332,19 +350,8 @@ async function makeQrExport(qrData) {
 async function buildExportPayload(decodedMii, exportFormat) {
 	const exportMii = withMiiExportDefaults(decodedMii);
 
-	if (exportFormat === 'PNG_3DS' || exportFormat === 'JPG_3DS') {
-		const qrData = await miijs.encodeMii(
-			exportMii,
-			exportMii?.hasOwnProperty('tl') ? miijs.MiiFormats.TLE : miijs.MiiFormats.CFED
-		);
-		const qrPng = await makeQrExport(qrData);
-		return exportFormat === 'JPG_3DS'
-			? await convertPngToJpeg(qrPng)
-			: qrPng;
-	}
-
-	if (exportFormat === 'PNG_WIIU') {
-		const qrData = await miijs.encodeMii(exportMii, miijs.MiiFormats.FFED);
+	if (exportFormat === 'PNG_ALL') {
+		const qrData = await miijs.encodeMii(exportMii, miijs.MiiFormats.FSDEX);
 		return await makeQrExport(qrData);
 	}
 
@@ -625,7 +632,23 @@ async function initMiiStudio() {
 	const [, miiStudioMiiID, miiStudioClientID] = regexResult;
 	miiStudioStorageKey = `https%3A%2F%2Fstudio.mii.nintendo.com%2Fmiis%2F${miiStudioMiiID}%2Fedit%3Fclient_id%3D${miiStudioClientID}`;
 
-	const miiData = await getPageLocalStorage(miiStudioStorageKey);
+	const storedMii = await getPageLocalStorage(miiStudioStorageKey);
+	let miiData = storedMii?.data;
+	if (storedMii?.key) {
+		miiStudioStorageKey = storedMii.key;
+	}
+	if (!miiData) {
+		try {
+			const recovered = await recoverPageMiiData(miiStudioStorageKey);
+			if (recovered?.data) {
+				miiStudioStorageKey = recovered.key;
+				miiData = recovered.data;
+			}
+		}
+		catch (error) {
+			console.warn('Could not load the current Mii from the editor.', error);
+		}
+	}
 
 	if (!miiData) {
 		miiStudioNoMiiDataWarningDiv.hidden=false;

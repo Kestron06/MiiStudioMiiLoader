@@ -8,7 +8,7 @@ Code originally written by [HEYimHeroic](https://github.com/HEYimHeroic). Browse
 
 Now the Mii Studio Mii Loader can be used through a regular browser extension. Head to Nintendo's [official Mii Studio site](https://my.nintendo.com/mii). (You may have to enter the site via the My Nintendo site first. Make sure you're signed into your My Nintendo account.) Make sure that you're not making a new Mii. If you are, save the new Mii, and go back to edit it again.
 
-Clicking on the extension with a Mii loaded will display its Mii Studio code, ready to be copied. If it doesn't work, make a change to the Mii (you can immediately change it back) and the Mii Studio code should be there. This should automatically update as you edit the Mii.
+Clicking on the extension with a Mii loaded will display its Mii Studio code, ready to be copied. If the editor has not yet written the Mii data to local storage, the extension saves the current unchanged Mii automatically. The code updates as you edit the Mii.
 
 To load a Mii Studio code, begin editing a Mii the same way as before, but now when clicking on the extension, enter a Mii Studio code into the textbox below it and click "Update Mii Studio Data". Then, refresh the page, and click "Continue editing" in the website for your Mii to appear. (Hitting "Start from scratch" will reset the process.)
 
